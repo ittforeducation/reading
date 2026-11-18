@@ -448,7 +448,7 @@ for(int i=0;i<6;i++){ if(i==pid) vHL = uHL[i]; }
   function buildGiant(opts = {}) {
     const rng = new RNG(opts.seed ?? 2026);
     const S = opts.scale ?? 1, WIDE = opts.wide ?? 1, DENS = opts.density ?? 1, CARD = opts.card ?? 1, LITE = !!opts.lite;
-    const R0 = 21, TH = 88;
+    const R0 = 26, TH = 88;
     const bark = new Buf();
     const clumps = [];
     const center = (y) => new THREE3.Vector3(3.2 * Math.sin(y * 0.03 + 0.5), y, 2.6 * Math.cos(y * 0.034 + 0.3) - 2.5);
@@ -467,7 +467,7 @@ for(int i=0;i<6;i++){ if(i==pid) vHL = uHL[i]; }
     };
     const groove = (y, th) => {
       const tw = th + Math.max(0, y) * 0.018;
-      return 0.62 + 0.38 * (0.5 + 0.5 * Math.sin(tw * 11)) * (0.75 + 0.25 * (0.5 + 0.5 * Math.sin(tw * 23 + 1.3)));
+      return 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(tw * 11)) * (0.75 + 0.25 * (0.5 + 0.5 * Math.sin(tw * 23 + 1.3)));
     };
     {
       const rings = LITE ? 34 : 96, radial = LITE ? 40 : 136, y0 = -4, y1 = TH + 8;
@@ -486,6 +486,60 @@ for(int i=0;i<6;i++){ if(i==pid) vHL = uHL[i]; }
       }
       gridIndices(bark, start, rings, radial);
     }
+    {
+      const c0 = center(0);
+      const inTrenchPre = (x, z) => Math.abs(x) < 106 && z > 58;
+      const mkRoot = (az, len, r0, startD, y0, depth = 0) => {
+        const pts = [];
+        let a = az;
+        const n = 7, wob = rng.random(0.5, 0.25) * (rng.random() < 0.5 ? 1 : -1), ph = rng.random(6.28);
+        for (let k = 0; k <= n; k++) {
+          const t = k / n;
+          a = az + wob * Math.sin(t * 3 + ph) * t;
+          const d = startD + len * t;
+          const x = c0.x + Math.cos(a) * d, z = c0.z + Math.sin(a) * d;
+          if (inTrenchPre(x, z)) break;
+          const y = y0 * Math.pow(1 - t, 2.2) + r0 * 0.28 * (1 - t) - 0.9 * t + 0.7 * Math.sin(t * 9 + ph) * (1 - t);
+          pts.push(new THREE3.Vector3(x, y, z));
+        }
+        if (pts.length < 4) return;
+        const tb = tube(bark, pts, {
+          segs: LITE ? 10 : 30,
+          radial: LITE ? 6 : 12,
+          r0,
+          base: pts[0],
+          grow: [0.02, 0.5],
+          part: 0,
+          radius: (t, ang) => (r0 * Math.pow(1 - 0.86 * t, 1.25) + 0.12) * (1 + 0.1 * Math.sin(ang * 5 + t * 16 + ph) + 0.06 * Math.sin(t * 31))
+        });
+        if (depth < 1 && !LITE) {
+          for (let m = 0; m < 2; m++) {
+            const t = rng.random(0.62, 0.3);
+            const b = tb.curve.getPointAt(t), tg = tb.curve.getTangentAt(t);
+            const a2 = Math.atan2(tg.z, tg.x) + (m ? 1 : -1) * rng.random(0.75, 0.4);
+            const dd = Math.hypot(b.x - c0.x, b.z - c0.z);
+            mkRootFrom(b, a2, len * rng.random(0.5, 0.3), r0 * (1 - 0.86 * t) * 0.7 + 0.3, ph);
+          }
+        }
+      };
+      const mkRootFrom = (b, a, len, r0, ph) => {
+        const pts = [];
+        for (let k = 0; k <= 5; k++) {
+          const t = k / 5, aa = a + 0.35 * Math.sin(t * 3 + ph) * t;
+          const x = b.x + Math.cos(aa) * len * t, z = b.z + Math.sin(aa) * len * t;
+          if (inTrenchPre(x, z)) break;
+          pts.push(new THREE3.Vector3(x, b.y * (1 - t) - 0.8 * t, z));
+        }
+        if (pts.length < 4) return;
+        tube(bark, pts, { segs: 14, radial: 8, r0, base: pts[0], grow: [0.3, 0.45], part: 0, radius: (t) => r0 * Math.pow(1 - 0.9 * t, 1.2) + 0.08 });
+      };
+      const nR = LITE ? 7 : 13;
+      for (let i = 0; i < nR; i++) {
+        const L0 = lobes[i % lobes.length];
+        const az = L0.a + (i >= lobes.length ? 0.39 : 0) + rng.random(0.12, -0.12);
+        mkRoot(az, rng.random(150, 85), rng.random(6.2, 3.8), R0 * rng.random(1.15, 0.85), rng.random(13, 7));
+      }
+    }
     const limbs = [];
     const NL = 6;
     const az0 = rng.random(Math.PI * 2);
@@ -497,7 +551,7 @@ for(int i=0;i<6;i++){ if(i==pid) vHL = uHL[i]; }
       const d = new THREE3.Vector3(Math.cos(az), 0, Math.sin(az));
       const side = new THREE3.Vector3().crossVectors(d, UP2);
       const w = () => side.clone().multiplyScalar(rng.random(9, -9)).add(new THREE3.Vector3(0, rng.random(5, -5), 0));
-      const lift = rng.random(0.75, 0.45);
+      const lift = rng.random(1.2, 0.75);
       const pts = [
         base.clone(),
         base.clone().addScaledVector(d, L * 0.2).addScaledVector(UP2, L * 0.2 * lift + 6),
@@ -505,7 +559,7 @@ for(int i=0;i<6;i++){ if(i==pid) vHL = uHL[i]; }
         base.clone().addScaledVector(d, L * 0.72).addScaledVector(UP2, L * 0.36 * lift + 10).add(w()),
         base.clone().addScaledVector(d, L * 0.95).addScaledVector(UP2, L * 0.55 * lift + 16)
       ];
-      const r0 = rng.random(9.5, 7.6);
+      const r0 = rng.random(11.5, 9);
       const birth = 0.1 + rng.random(0.06), dur = 0.33;
       const ph = rng.random(6.28);
       const { curve } = tube(bark, pts, {
@@ -521,8 +575,8 @@ for(int i=0;i<6;i++){ if(i==pid) vHL = uHL[i]; }
     }
     {
       const base = center(TH * 0.95);
-      const pts = [base.clone(), base.clone().add(new THREE3.Vector3(3, 22, -2)), base.clone().add(new THREE3.Vector3(-4, 44, 3)), base.clone().add(new THREE3.Vector3(2, 66, 1))];
-      const r0 = 8.5;
+      const pts = [base.clone(), base.clone().add(new THREE3.Vector3(4, 30, -3)), base.clone().add(new THREE3.Vector3(-6, 62, 4)), base.clone().add(new THREE3.Vector3(3, 96, 1))];
+      const r0 = 10.5;
       const { curve } = tube(bark, pts, { segs: LITE ? 16 : 40, radial: LITE ? 8 : 20, r0, base, grow: [0.1, 0.33], part: 0, radius: (t, a) => (r0 * Math.pow(1 - 0.8 * t, 1.1) + 0.2) * (1 + 0.06 * Math.sin(a * 7 + t * 12)) });
       limbs.push({ curve, r0, base, birth: 0.1, dur: 0.33, az: 0, part: 0, leader: true });
     }
@@ -560,12 +614,16 @@ for(int i=0;i<6;i++){ if(i==pid) vHL = uHL[i]; }
         clumps.push({ center: curve.getPointAt(1).add(new THREE3.Vector3(0, 4, 0)), size: rng.random(15, 11), n: 26, base, grow: [birth, dur], life: [birth + dur * 0.8, 9] });
       }
     }
-    const domeC = new THREE3.Vector3(0, TH + 42, 0);
-    for (let k = 0; k < Math.round((LITE ? 40 : 70) * WIDE * WIDE); k++) {
-      const a = rng.random(Math.PI * 2), el = Math.acos(rng.random(1, 0.15));
-      const rr = rng.random(1, 0.72);
-      const c = domeC.clone().add(new THREE3.Vector3(Math.sin(el) * Math.cos(a) * 118 * WIDE * rr, Math.cos(el) * 54 * rr - 4, Math.sin(el) * Math.sin(a) * 118 * WIDE * rr));
-      clumps.push({ center: c, size: rng.random(17, 12), n: 24, base: new THREE3.Vector3(), grow: [0, 0], life: [rng.random(0.82, 0.66), 9] });
+    const domeC = new THREE3.Vector3(0, TH + 34, 0);
+    const RX = 122 * WIDE, RY = 104;
+    const nD = Math.round((LITE ? 46 : 150) * WIDE);
+    for (let k = 0; k < nD; k++) {
+      const a = rng.random(Math.PI * 2), v2 = rng.random(1, -0.14), sn = Math.sqrt(Math.max(0, 1 - v2 * v2));
+      const inner = k % 4 === 0;
+      const sh = inner ? rng.random(0.68, 0.4) : rng.random(1, 0.84);
+      const bump = 1 + 0.1 * Math.sin(a * 5 + 1.3) + 0.07 * Math.sin(a * 9 + v2 * 6);
+      const c = domeC.clone().add(new THREE3.Vector3(sn * Math.cos(a) * RX * sh * bump, v2 * RY * sh * bump, sn * Math.sin(a) * RX * sh * bump));
+      clumps.push({ center: c, size: inner ? rng.random(22, 16) : rng.random(27, 18), n: inner ? 20 : 30, base: new THREE3.Vector3(), grow: [0, 0], life: [rng.random(0.82, 0.6), 9] });
     }
     for (let k = 0; k < 7; k++) {
       const a = k / 7 * Math.PI * 2;
@@ -573,11 +631,11 @@ for(int i=0;i<6;i++){ if(i==pid) vHL = uHL[i]; }
       clumps.push({ center: c, size: 12, n: 26, base: new THREE3.Vector3(), grow: [0, 0], life: [0, 0.5], juvenile: true });
     }
     clumps.push({ center: center(TH).add(new THREE3.Vector3(0, 24, 0)), size: 14, n: 30, base: new THREE3.Vector3(), grow: [0, 0], life: [0, 0.5], juvenile: true });
-    const crownC = new THREE3.Vector3(0, TH + 55, 0);
+    const crownC = new THREE3.Vector3(0, TH + 40, 0);
     const lf = { pos: [], nor: [], uv: [], idx: [], center: [], base: [], grow: [], life: [], col: [] };
     const q = new THREE3.Quaternion(), v = new THREE3.Vector3(), e = new THREE3.Euler();
     for (const c of clumps) {
-      const cr = rng.random(1.1, 0.85);
+      const cr = rng.random(1.22, 0.78);
       const nLeaves = Math.round(c.n * DENS);
       for (let i = 0; i < nLeaves; i++) {
         const u = rng.random(), th = rng.random(Math.PI * 2), ph = Math.acos(rng.random(1, -1));
@@ -589,8 +647,11 @@ for(int i=0;i<6;i++){ if(i==pid) vHL = uHL[i]; }
         q.setFromEuler(e);
         const nrm = o.clone().normalize().multiplyScalar(0.6).add(lp.clone().sub(crownC).normalize().multiplyScalar(0.4)).normalize();
         const inner = Math.min(1, o.length() / c.size);
-        const hgt = Math.min(1, Math.max(0, (lp.y - (TH + 10)) / 100));
-        const br = (0.55 + 0.45 * inner) * (0.78 + 0.32 * hgt) * cr * rng.random(1.08, 0.9);
+        const hgt = Math.min(1, Math.max(0, (lp.y - (TH + 5)) / 135));
+        const top = 0.5 + 0.5 * Math.max(-1, Math.min(1, o.y / (c.size * 0.62)));
+        const br = (0.3 + 0.95 * Math.pow(top, 1.25)) * (0.62 + 0.38 * inner) * (0.74 + 0.4 * hgt) * cr * rng.random(1.08, 0.9);
+        const axisD = Math.hypot(lp.x, lp.z);
+        const glow = c.juvenile ? 0 : (1 - top) * Math.exp(-axisD / 85) * (1 - 0.6 * hgt);
         const warm = rng.random() < 0.15 ? 1.12 : 1;
         for (const rot of [0, Math.PI / 2]) {
           const qr = new THREE3.Quaternion().setFromAxisAngle(UP2, rot).premultiply(q);
@@ -603,7 +664,7 @@ for(int i=0;i<6;i++){ if(i==pid) vHL = uHL[i]; }
             lf.base.push(c.base.x, c.base.y, c.base.z);
             lf.grow.push(c.grow[0], c.grow[1]);
             lf.life.push(c.life[0], c.life[1]);
-            lf.col.push(br * warm, br, br * (warm > 1 ? 0.75 : 0.95));
+            lf.col.push(br * warm + glow * 0.75, br + glow * 0.62, br * (warm > 1 ? 0.75 : 0.95) + glow * 0.08);
           });
           lf.uv.push(0, 1, 0, 0, 1, 0, 1, 1);
           lf.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -720,9 +781,8 @@ vHL = uHL[4];
   var ZC = 190;
   var ZF = 650;
   var TX = 300;
-  var SUN_DIR = new THREE4.Vector3(-0.5, 0.72, 0.48).normalize();
-  var GLOW_DIR = new THREE4.Vector3(-0.55, 0.42, -0.72).normalize();
-  var VIEW_SHIFT = 210;
+  var SUN_DIR = new THREE4.Vector3(-0.66, 0.56, 0.4).normalize();
+  var GLOW_DIR = new THREE4.Vector3(-0.5, 0.34, -0.8).normalize();
   var $ = (s) => document.querySelector(s);
   var app = $("#app");
   var DPR = window.devicePixelRatio || 1;
@@ -746,19 +806,21 @@ vHL = uHL[4];
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE4.PCFShadowMap;
   renderer.toneMapping = THREE4.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.08;
   app.appendChild(renderer.domElement);
   var labelRenderer = new import_CSS2DRenderer.CSS2DRenderer();
   labelRenderer.setSize(window.innerWidth, window.innerHeight);
   labelRenderer.domElement.className = "labels";
   app.appendChild(labelRenderer.domElement);
   var scene = new THREE4.Scene();
-  var FOG = new THREE4.Color(14673372);
-  scene.fog = new THREE4.Fog(FOG, 1700, 7800);
+  var FOG = new THREE4.Color(15327174);
+  scene.fog = new THREE4.Fog(FOG, 1900, 9500);
   var camera = new THREE4.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 2, 16e3);
   function applyViewOffset() {
     const w = window.innerWidth, h = window.innerHeight;
-    const shift = w > 1100 ? VIEW_SHIFT * (w / 1600) : 0;
+    const pn = document.getElementById("panel");
+    const right = pn && pn.offsetWidth > 0 ? pn.offsetLeft + pn.offsetWidth : w * 0.5;
+    const shift = w > 900 ? right / 2 : 0;
     camera.setViewOffset(w, h, -shift, 0, w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -833,9 +895,9 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
       fragmentShader: `varying vec3 vDir; uniform vec3 uGlow;
       void main(){
         float y = vDir.y;
-        vec3 zen = vec3(0.24,0.47,0.80);
-        vec3 mid = vec3(0.52,0.71,0.90);
-        vec3 hor = vec3(0.90,0.91,0.86);
+        vec3 zen = vec3(0.16,0.38,0.70);
+        vec3 mid = vec3(0.50,0.70,0.86);
+        vec3 hor = vec3(1.0,0.90,0.72);
         vec3 c = mix(hor, mix(mid, zen, smoothstep(0.18,0.8,y)), smoothstep(0.0,0.24,y));
         if (y < 0.0) c = hor;
         float s = max(dot(vDir, uGlow),0.0);
@@ -867,6 +929,21 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     }
     scene.add(group);
     return group;
+  }
+  var mistSprites = [];
+  function makeMist(cloudTex) {
+    const rng = new RNG(4711);
+    for (let i = 0; i < 20; i++) {
+      const m = new THREE4.SpriteMaterial({ map: cloudTex, transparent: true, depthWrite: false, opacity: rng.random(0.34, 0.16), color: 16773590, fog: false });
+      const s = new THREE4.Sprite(m);
+      const a = rng.random(Math.PI * 2), r = rng.random(2600, 950);
+      s.position.set(Math.sin(a) * r, rng.random(190, 50), Math.cos(a) * r);
+      const sc = rng.random(1500, 800);
+      s.scale.set(sc, sc * 0.3, 1);
+      s.userData.op = m.opacity;
+      mistSprites.push(s);
+      scene.add(s);
+    }
   }
   function makeMountains() {
     const segs = 160, rows = 5;
@@ -1065,8 +1142,9 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     makeSky();
     makeMountains();
     cloudsRef = makeClouds(cloudT);
-    scene.add(new THREE4.HemisphereLight(16773336, 7297602, 1.15));
-    sun = new THREE4.DirectionalLight(16769200, 3.1);
+    makeMist(cloudT);
+    scene.add(new THREE4.HemisphereLight(13623551, 5722159, 0.95));
+    sun = new THREE4.DirectionalLight(16766624, 3.7);
     sun.position.copy(SUN_DIR).multiplyScalar(1500);
     sun.castShadow = true;
     sun.shadow.mapSize.set(QUALITY[qKey].shadow, QUALITY[qKey].shadow);
@@ -1141,6 +1219,7 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     setProgress(1);
     setTimeout(() => $("#loader").classList.add("done"), 200);
     buildUI();
+    applyViewOffset();
     goStage(0, true);
     animate();
   }
@@ -1153,9 +1232,9 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
   function buildTree(barkC, barkN, leafT) {
     tree = new THREE4.Group();
     scene.add(tree);
-    giant = buildGiant({ seed: 2026, scale: 3, wide: 1.25, density: 2.2, card: 0.75 });
+    giant = buildGiant({ seed: 2026, scale: 3, wide: 1.42, density: 1.75, card: 0.8 });
     const bU = { uGrow: U.uGrow, uThin: U.uThin, uHL: U.uHL, uTime: U.uTime, uDim: U.uDim };
-    const barkMat = new THREE4.MeshStandardMaterial({ map: barkC, normalMap: barkN, normalScale: new THREE4.Vector2(1.8, 1.8), roughness: 0.95, color: 15984336, emissive: 1840140, vertexColors: true });
+    const barkMat = new THREE4.MeshStandardMaterial({ map: barkC, normalMap: barkN, normalScale: new THREE4.Vector2(1.8, 1.8), roughness: 0.95, color: 14469292, emissive: 1840140, vertexColors: true });
     barkMat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, bU);
       sh.vertexShader = barkGrowPars + sh.vertexShader.replace("#include <begin_vertex>", barkGrowMain);
@@ -1581,8 +1660,8 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     const g = new THREE4.Group();
     const axis = new THREE4.Vector3(0.42, -1, 0.38).normalize();
     const rng = new RNG(12);
-    for (let i = 0; i < 6; i++) {
-      const w = rng.random(80, 36), L = rng.random(960, 720);
+    for (let i = 0; i < 12; i++) {
+      const w = rng.random(130, 46), L = rng.random(1150, 800);
       const m = new THREE4.ShaderMaterial({
         transparent: true,
         depthWrite: false,
@@ -1596,11 +1675,11 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
           float edge = pow(max(sin(vUv.x*3.14159), 0.0), 2.2);
           float along = smoothstep(0.0, 0.25, vUv.y) * (1.0 - smoothstep(0.55, 1.0, vUv.y));
           float flick = 0.75 + 0.25*sin(uTime*0.6 + uSeed*7.0);
-          gl_FragColor = vec4(vec3(1.0,0.9,0.62), clamp(edge*along*flick*0.06*uOpacity, 0.0, 1.0));
+          gl_FragColor = vec4(vec3(1.0,0.9,0.62), clamp(edge*along*flick*0.085*uOpacity, 0.0, 1.0));
         }`
       });
       const mesh = new THREE4.Mesh(new THREE4.PlaneGeometry(w, L), m);
-      const end = new THREE4.Vector3(rng.random(450, -500), 0, rng.random(120, -390));
+      const end = new THREE4.Vector3(rng.random(620, -640), 0, rng.random(330, -420));
       mesh.position.copy(end.clone().addScaledVector(axis, -L * 0.42));
       mesh.userData.axis = axis;
       g.add(mesh);
@@ -1737,7 +1816,7 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
         scene.add(im);
         return im;
       };
-      FX.fruit = { meshes: [mk(170, 7.5, [16747050, 16756782, 15224874, 16765503], 8006144), mk(240, 5.2, [16777215, 16770031, 16774600], 6969936)], v: 0 };
+      FX.fruit = { meshes: [mk(230, 10.5, [16747050, 16756782, 15224874, 16765503], 8006144), mk(300, 7, [16777215, 16770031, 16774600], 6969936)], v: 0 };
     }
     {
       const N = 300, rng = new RNG(919);
@@ -2098,14 +2177,14 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
       scene.add(o);
       return o;
     };
-    labels.l1 = mk(0, "\u6DFA\u5C64", "\u901A\u7528\u7B56\u7565\u30FB\u6613\u65BC\u5957\u7528", "c1");
-    labels.l2 = mk(1, "\u4E2D\u5C64", "\u8AB2\u7A0B\u9818\u5C0E\u30FB\u5BE6\u8B49\u65B9\u6CD5", "c2");
-    labels.l3 = mk(2, "\u6DF1\u5C64", "\u6559\u80B2\u7406\u8AD6\u6839\u57FA", "c3");
+    labels.l1 = mk(0, "\u8868\u571F", "\u4E00\u822C\u5E2B\u57F9\uFF5C\u4E03\u7A2E\u6559\u5E2B\u77E5\u8B58", "c1");
+    labels.l2 = mk(1, "\u6B21\u571F", "\u67EF\u83EF\u8473\u95B1\u8B80\u7814\u7A76\u4E2D\u5FC3\uFF5C\u5B78\u7406", "c2");
+    labels.l3 = mk(2, "\u6DF1\u571F", "\u67EF\u83EF\u8473\u95B1\u8B80\u7814\u7A76\u4E2D\u5FC3\uFF5C\u5BE6\u8E10\u53D6\u5F91", "c3");
     const c = giant.center(130);
-    labels.trunk = tag('<span class="dot"></span><div class="pill"><b>\u4E3B\u5E79</b><em>\u4E2D\u5FC3\u5B78\u6821\uFF5C\u6821\u9577\u30FB\u884C\u653F\u5718\u968A</em></div>', "part left");
+    labels.trunk = tag('<span class="dot"></span><div class="pill"><b>\u4E3B\u5E79</b><em>\u6C38\u8208\u570B\u5C0F\uFF5C\u6821\u9577\u30FB\u884C\u653F\u5718\u968A</em></div>', "part left");
     labels.trunk.position.set(c.x - giant.R0 * 0.75, 130, c.z + giant.R0 * 0.55);
     scene.add(labels.trunk);
-    labels.root = tag('<span class="dot"></span><div class="pill"><b>\u7D2E\u6839</b><em id="rootTagTxt">\u6DF1\u5C64</em></div>', "part left");
+    labels.root = tag('<span class="dot"></span><div class="pill"><b>\u7D2E\u6839</b><em id="rootTagTxt">\u6DF1\u571F</em></div>', "part left");
     labels.root.position.set(-100, -30, 235);
     scene.add(labels.root);
     const add = (key, b, em, pos, cls = "part") => {
@@ -2116,12 +2195,12 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     };
     add("core", "\u6A39\u5FC3", "\u95B1\u8B80\u6559\u80B2 \xD7 \u5BE6\u8B49\u7CBE\u795E", ANCH.core, "part gold left");
     add("res", "\u8CC7\u6E90\u4E2D\u5FC3", "\u7B2C 2 \u5340\u504F\u9109\u6559\u80B2\u8CC7\u6E90\u4E2D\u5FC3", ANCH.limbA, "part gold left");
-    add("adv", "\u7CBE\u9032\u8A08\u756B", "\u521D\u968E\u30FB\u9032\u968E\u30FB\u9AD8\u968E\u793E\u7FA4", ANCH.tier[1], "part gold");
-    add("bridge", "\u5354\u4F5C\u9818\u5C0E", "\u6838\u5FC3\u8B1B\u5E2B\u5E36\u9818\u6307\u5B9A\u793E\u7FA4", ANCH.bridge.clone().add(new THREE4.Vector3(0, -14, 0)), "part blue");
+    add("adv", "\u7CBE\u9032\u8A08\u756B", "\u521D\u968E\u30FB\u9032\u968E\u30FB\u9AD8\u968E\u793E\u7FA4", ANCH.tier[2].clone().add(new THREE4.Vector3(0, 40, 0)), "part gold left");
+    add("bridge", "\u5354\u4F5C\u9818\u5C0E", "\u6838\u5FC3\u8B1B\u5E2B\u5E36\u9818\u6307\u5B9A\u793E\u7FA4", ANCH.bridge.clone().add(new THREE4.Vector3(0, -45, 0)), "part blue");
     ["\u521D\u968E\u793E\u7FA4", "\u9032\u968E\u793E\u7FA4", "\u9AD8\u968E\u793E\u7FA4"].forEach((t, i) => add("tier" + (i + 1), t, ["\u5171\u540C\u5099\u8AB2", "\u89C0\u8AB2\u8B70\u8AB2", "\u5E36\u9818\u4ED6\u6821"][i], ANCH.tier[i], "part gold"));
-    add("canopy", "\u6A39\u51A0", "\u7B2C\u4E00\u7DDA\u6559\u5E2B\u30FB\u958B\u82B1\u7D50\u679C", new THREE4.Vector3(330, giant.TH + 110, 300), "part green");
-    add("leaf", "\u843D\u8449\u6B78\u6839", "\u73FE\u5834\u7D93\u9A57\u56DE\u994B\u5B78\u7406\u8207\u5E2B\u57F9", ANCH.leaf, "part gold left");
-    add("people", "\u5B78\u751F\u30FB\u5BB6\u9577", "\u8B77\u6A39\u611B\u6A39\u30FB\u89AA\u5E2B\u5354\u4F5C", new THREE4.Vector3(-150, 30, 300), "part blue left");
+    add("canopy", "\u6A39\u51A0", "\u7B2C\u4E00\u7DDA\u6559\u5E2B\u30FB\u958B\u82B1\u7D50\u679C", new THREE4.Vector3(-150, giant.TH + 200, 430), "part green left");
+    add("leaf", "\u843D\u8449\u6B78\u6839", "\u8AB2\u5802\u8B49\u64DA\u56DE\u5230\u5B78\u7406", new THREE4.Vector3(-60, 150, ZC + 200), "part gold");
+    add("people", "\u5B78\u751F\u30FB\u5BB6\u9577", "\u8B77\u6A39\u611B\u6A39\u30FB\u89AA\u5E2B\u5354\u4F5C", new THREE4.Vector3(60, 62, 330), "part blue");
     const s0 = FX.region.sites[3];
     add("region", "\u9130\u8FD1\u5B78\u6821", "\u7A2E\u5B50\u51FA\u82BD\u30FB\u82D7\u6728\u6210\u6797", new THREE4.Vector3(s0.x, 175, s0.z), "part green");
     Object.values(labels).forEach((l) => {
@@ -2233,7 +2312,7 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     state.rootTarget = [0.02, 0.333, 0.666, 1][n];
     document.querySelectorAll(".depth button").forEach((b) => b.classList.toggle("on", +b.dataset.d === n));
     const t = document.getElementById("rootTagTxt");
-    if (t) t.textContent = ["", "\u6DFA\u5C64", "\u4E2D\u5C64", "\u6DF1\u5C64"][n];
+    if (t) t.textContent = ["", "\u8868\u571F", "\u6B21\u571F", "\u6DF1\u571F"][n];
     const info = document.getElementById("depthInfo");
     if (info) info.innerHTML = STAGES[stageIdx].depthText?.[n] ?? "";
   }
@@ -2253,8 +2332,7 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
   }
   function resolveCam(C) {
     if (!C.focus) return C;
-    const a = ANCH[C.focus];
-    const t = a.toArray();
+    const t = ANCH[C.focus].toArray();
     return { pos: [t[0] + C.off[0], t[1] + C.off[1], t[2] + C.off[2]], target: t, dur: C.dur, from: C.from };
   }
   function goStage(i, first = false) {
@@ -2283,7 +2361,7 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     if (S.fx.rootDepth != null) setRootDepth(S.fx.rootDepth);
     state.fx = S.fx;
     state.nutriDir = S.fx.nutriDir ?? 1;
-    if (i >= 9) regionStart(i > 9 && !FX.region.done && FX.region.t < 0);
+    if (S.fx.region) regionStart(S.fx.region === "done" && !FX.region.done && FX.region.t < 0);
     else regionReset();
     controls.autoRotate = !!S.fx.orbit;
     controls.autoRotateSpeed = 0.35;
@@ -2301,7 +2379,7 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
       <h2>${S.title}</h2>
       <div class="sub">${S.sub}</div>
       ${S.body}
-      ${S.depthText ? `<div class="depth"><span>\u7D2E\u6839\u6DF1\u5EA6</span>${["\u6DFA", "\u4E2D", "\u6DF1"].map((t, k) => `<button data-d="${k + 1}">${t}</button>`).join("")}</div><div id="depthInfo" class="depthinfo"></div>` : ""}
+      ${S.depthText ? `<div class="depth"><span>\u7D2E\u6839\u6DF1\u5EA6</span>${["\u8868\u571F", "\u6B21\u571F", "\u6DF1\u571F"].map((t, k) => `<button data-d="${k + 1}">${t}</button>`).join("")}</div><div id="depthInfo" class="depthinfo"></div>` : ""}
       ${S.fx.grow || S.fx.replayRegion ? '<button class="replay" id="replay">\u21BB \u91CD\u64AD\u6210\u9577</button>' : ""}`;
       p.querySelectorAll(".depth button").forEach((b) => b.addEventListener("click", () => setRootDepth(+b.dataset.d)));
       const rp = p.querySelector("#replay");
@@ -2438,6 +2516,13 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     state.dim = approach(state.dim, state.dimTarget, 3, dt);
     U.uDim.value = state.dim;
     updateExtras(dt);
+    {
+      const k = 1 - sstep2(500, 1100, camera.position.y);
+      mistSprites.forEach((m) => {
+        m.material.opacity = m.userData.op * k;
+        m.visible = k > 0.02;
+      });
+    }
     cloudsRef.children.forEach((c) => {
       c.position.x += c.userData.speed * dt * 2;
     });

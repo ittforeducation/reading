@@ -2335,7 +2335,7 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     const t = ANCH[C.focus].toArray();
     return { pos: [t[0] + C.off[0], t[1] + C.off[1], t[2] + C.off[2]], target: t, dur: C.dur, from: C.from };
   }
-  function goStage(i, first = false) {
+  function goStage(i, first = false, page = 0) {
     stageIdx = i;
     const S = STAGES[i];
     const C = resolveCam(S.cam);
@@ -2366,22 +2366,35 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     controls.autoRotate = !!S.fx.orbit;
     controls.autoRotateSpeed = 0.35;
     showLabels(S.labels || []);
-    renderPanel(S);
+    renderPanel(S, page);
     renderNav();
   }
-  function renderPanel(S) {
+  var pageIdx = 0;
+  var pagesOf = (S) => S.pages || [S.body];
+  function renderPanel(S, page = 0, quick = false) {
     const p = $("#panel");
+    const pages = pagesOf(S);
+    pageIdx = Math.max(0, Math.min(pages.length - 1, page));
     p.classList.remove("show");
     setTimeout(() => {
       p.style.setProperty("--accent", S.accent);
+      const pager = pages.length > 1 ? `<div class="pager">${pages.map((_, k) => `<button class="${k === pageIdx ? "on" : ""}" data-p="${k}">${k + 1}</button>`).join("")}</div>` : "";
+      const showDepth = S.depthText && pageIdx === 0;
       p.innerHTML = `
-      <div class="kicker"><span class="num">${S.num}</span>${S.kicker}</div>
-      <h2>${S.title}</h2>
-      <div class="sub">${S.sub}</div>
-      ${S.body}
-      ${S.depthText ? `<div class="depth"><span>\u7D2E\u6839\u6DF1\u5EA6</span>${["\u8868\u571F", "\u6B21\u571F", "\u6DF1\u571F"].map((t, k) => `<button data-d="${k + 1}">${t}</button>`).join("")}</div><div id="depthInfo" class="depthinfo"></div>` : ""}
-      ${S.fx.grow || S.fx.replayRegion ? '<button class="replay" id="replay">\u21BB \u91CD\u64AD\u6210\u9577</button>' : ""}`;
+      <div class="kicker"><span class="num">${S.num}</span>${S.kicker}<span class="sp"></span>
+        ${(S.fx.grow || S.fx.replayRegion) && pageIdx === 0 ? '<button class="replay" id="replay">\u21BB \u91CD\u64AD\u6210\u9577</button>' : ""}${pager}</div>
+      <h2>${S.titles && S.titles[pageIdx] || S.title}</h2>
+      <div class="sub">${S.subs && S.subs[pageIdx] || S.sub}</div>
+      <div class="pbody">${pages[pageIdx]}</div>
+      ${showDepth ? `<div class="depth"><span>\u7D2E\u6839\u6DF1\u5EA6</span>${["\u8868\u571F", "\u6B21\u571F", "\u6DF1\u571F"].map((t, k) => `<button data-d="${k + 1}">${t}</button>`).join("")}</div><div id="depthInfo" class="depthinfo"></div>` : ""}`;
+      p.scrollTop = 0;
       p.querySelectorAll(".depth button").forEach((b) => b.addEventListener("click", () => setRootDepth(+b.dataset.d)));
+      p.querySelectorAll(".pager button").forEach((b) => b.addEventListener("click", () => {
+        renderPanel(S, +b.dataset.p, true);
+        renderNav();
+      }));
+      p.querySelectorAll("[data-video]").forEach((b) => b.addEventListener("click", () => openVideo(b.dataset.video)));
+      p.querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => openImage(b.getAttribute("src"))));
       const rp = p.querySelector("#replay");
       if (rp) rp.addEventListener("click", () => {
         if (S.fx.grow) {
@@ -2393,9 +2406,26 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
         const c = resolveCam(S.cam);
         flyTo(c.pos, c.target, 1.5);
       });
-      if (S.depthText) setRootDepth(state.rootDepth || 3);
+      if (showDepth) setRootDepth(state.rootDepth || 3);
       p.classList.add("show");
-    }, 260);
+    }, quick ? 140 : 260);
+  }
+  function openVideo(src) {
+    const lb = $("#lightbox");
+    lb.innerHTML = `<div class="lb-in"><video src="${src}" controls autoplay playsinline></video><button class="lb-x" aria-label="\u95DC\u9589">\u2715</button></div>`;
+    lb.classList.add("show");
+  }
+  function openImage(src) {
+    const lb = $("#lightbox");
+    lb.innerHTML = `<div class="lb-in"><img src="${src}" alt=""><button class="lb-x" aria-label="\u95DC\u9589">\u2715</button></div>`;
+    lb.classList.add("show");
+  }
+  function closeLightbox() {
+    const lb = $("#lightbox");
+    if (!lb.classList.contains("show")) return false;
+    lb.classList.remove("show");
+    lb.innerHTML = "";
+    return true;
   }
   function renderNav() {
     const dots = $("#dots");
@@ -2404,16 +2434,23 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
       const k = +b.dataset.k;
       if (STAGES[k].built) goStage(k);
     }));
-    $("#prev").disabled = !findBuilt(-1);
-    $("#next").disabled = !findBuilt(1);
+    $("#prev").disabled = !findBuilt(-1) && pageIdx === 0;
+    $("#next").disabled = !findBuilt(1) && pageIdx >= pagesOf(STAGES[stageIdx]).length - 1;
   }
   function findBuilt(dir) {
     for (let k = stageIdx + dir; k >= 0 && k < STAGES.length; k += dir) if (STAGES[k].built) return { k };
     return null;
   }
   function step(dir) {
+    if (closeLightbox()) return;
+    const S = STAGES[stageIdx], n = pagesOf(S).length;
+    if (pageIdx + dir >= 0 && pageIdx + dir < n) {
+      renderPanel(S, pageIdx + dir, true);
+      renderNav();
+      return;
+    }
     const f = findBuilt(dir);
-    if (f) goStage(f.k);
+    if (f) goStage(f.k, false, dir < 0 ? pagesOf(STAGES[f.k]).length - 1 : 0);
   }
   function toast(msg) {
     const t = $("#toast");
@@ -2429,9 +2466,13 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     window.addEventListener("keydown", (e) => {
       if (e.key === "ArrowRight" || e.key === "PageDown") step(1);
       if (e.key === "ArrowLeft" || e.key === "PageUp") step(-1);
-      if (e.key === "f" || e.key === "F") toggleFS();
+      if (e.key === "Escape") closeLightbox();
+      if ((e.key === "f" || e.key === "F") && !$("#lightbox").classList.contains("show")) toggleFS();
     });
     $("#fs").addEventListener("click", toggleFS);
+    $("#lightbox").addEventListener("click", (e) => {
+      if (e.target.id === "lightbox" || e.target.classList.contains("lb-x")) closeLightbox();
+    });
     $("#reset").addEventListener("click", () => {
       const c = resolveCam(STAGES[stageIdx].cam);
       flyTo(c.pos, c.target, 1.6);
@@ -2456,7 +2497,9 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     return cur + (tgt - cur) * (1 - Math.exp(-rate * dt));
   }
   var STILL = location.search.includes("still");
+  var NOGL = location.search.includes("nogl");
   function renderOnce() {
+    if (NOGL) return;
     updateRays();
     renderer.render(scene, camera);
     labelRenderer.render(scene, camera);
@@ -2533,7 +2576,7 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     labelRenderer.setSize(window.innerWidth, window.innerHeight);
     [particles, sparkles, motes, FX.leaves && FX.leaves.pts, FX.core && FX.core.sparks, FX.people && FX.people.water, FX.region && FX.region.seeds].forEach((p) => p && (p.material.uniforms.uScale.value = window.innerHeight / 2));
   });
-  window.__goStage = (i) => goStage(i);
+  window.__goStage = (i, pg = 0) => goStage(i, false, pg);
   window.__setGrowth = (g) => {
     state.growAnim = null;
     setGrowthU(g);

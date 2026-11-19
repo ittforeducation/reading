@@ -819,7 +819,7 @@ vHL = uHL[4];
   function applyViewOffset() {
     const w = window.innerWidth, h = window.innerHeight;
     const pn = document.getElementById("panel");
-    const right = pn && pn.offsetWidth > 0 ? pn.offsetLeft + pn.offsetWidth : w * 0.5;
+    const right = document.body.classList.contains("full") ? 0 : pn && pn.offsetWidth > 0 ? pn.offsetLeft + pn.offsetWidth : w * 0.5;
     const shift = w > 900 ? right / 2 : 0;
     camera.setViewOffset(w, h, -shift, 0, w, h);
     camera.aspect = w / h;
@@ -2339,10 +2339,16 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     stageIdx = i;
     const S = STAGES[i];
     const C = resolveCam(S.cam);
-    if (first) {
+    document.body.classList.toggle("full", !!S.full);
+    applyViewOffset();
+    if (C.from && (first || S.fx.grow)) {
       camera.position.set(...C.from);
       controls.target.set(...C.target);
       flyTo(C.pos, C.target, 7.5);
+    } else if (first) {
+      camAnim = null;
+      camera.position.set(...C.pos);
+      controls.target.set(...C.target);
     } else flyTo(C.pos, C.target, C.dur ?? 2.6);
     state.slabTarget = S.fx.cut ? 1 : 0;
     state.ghostTarget = S.fx.ghost ?? 0;
@@ -2513,9 +2519,14 @@ float fbm(vec2 p){ float a=0.5, s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
     requestAnimationFrame(animate);
     const dt = Math.min(clock.getDelta(), 0.05);
     tick(dt);
+    if (document.body.classList.contains("full")) {
+      if (++fullSkip % 20 === 0) renderOnce();
+      return;
+    }
     autoQuality(dt);
     renderOnce();
   }
+  var fullSkip = 19;
   function tick(dt) {
     U.uTime.value += dt;
     updateCam(dt);
